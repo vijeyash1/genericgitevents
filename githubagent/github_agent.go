@@ -21,7 +21,11 @@ const (
 	path           = "/webhooks"
 )
 
-func event(w http.ResponseWriter, r *http.Request) {
+var token string = os.Getenv("NATS_TOKEN")
+var natsurl string = os.Getenv("NATS_ADDRESS")
+
+func main() {
+
 	// Connect to NATS
 	nc, err := nats.Connect(natsurl, nats.Name("Github metrics"), nats.Token(token))
 	checkErr(err)
@@ -31,36 +35,32 @@ func event(w http.ResponseWriter, r *http.Request) {
 	// Creates stream
 	err = createStream(js)
 	checkErr(err)
-	hook, _ := github.New(github.Options.Secret("helloworld"))
-	payload, err := hook.Parse(r, github.PushEvent)
-	//fmt.Printf("%T \n", payload)
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 
-	if err != nil {
-		if err == github.ErrEventNotFound {
-			// ok event wasn;t one of the ones asked to be parsed
-			fmt.Println("this event was not present")
+		hook, _ := github.New(github.Options.Secret("helloworld"))
+		payload, err := hook.Parse(r, github.PushEvent)
+		//fmt.Printf("%T \n", payload)
+
+		if err != nil {
+			if err == github.ErrEventNotFound {
+				// ok event wasn;t one of the ones asked to be parsed
+				fmt.Println("this event was not present")
+			}
 		}
-	}
-	switch payload.(type) {
+		switch payload.(type) {
 
-	case github.PushPayload:
-		release := payload.(github.PushPayload)
-		var by, at, repo string = release.Commits[0].Author.Name, release.HeadCommit.Timestamp, release.Repository.Name
-		publishGithubMetrics(by, at, repo, js)
+		case github.PushPayload:
+			release := payload.(github.PushPayload)
+			var by, at, repo string = release.Commits[0].Author.Name, release.HeadCommit.Timestamp, release.Repository.Name
+			publishGithubMetrics(by, at, repo, js)
 
-		fmt.Printf("commited by: %s \n", release.Commits[0].Author.Name)
-		fmt.Printf("commited at: %s \n", release.HeadCommit.Timestamp)
-		fmt.Printf("repository name:%s \n", release.Repository.Name)
-		//	fmt.Printf("default branch:%s \n", release.Repository.DefaultBranch)
-		//	fmt.Printf("master branch:%s \n", release.Repository.MasterBranch)
-	}
-}
-
-var token string = os.Getenv("NATS_TOKEN")
-var natsurl string = os.Getenv("NATS_ADDRESS")
-
-func main() {
-	http.HandleFunc(path, event)
+			fmt.Printf("commited by: %s \n", release.Commits[0].Author.Name)
+			fmt.Printf("commited at: %s \n", release.HeadCommit.Timestamp)
+			fmt.Printf("repository name:%s \n", release.Repository.Name)
+			//	fmt.Printf("default branch:%s \n", release.Repository.DefaultBranch)
+			//	fmt.Printf("master branch:%s \n", release.Repository.MasterBranch)
+		}
+	})
 	fmt.Println("github webhook server started at port 8000")
 	http.ListenAndServe(":8000", nil)
 }
