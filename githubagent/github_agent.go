@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 
 	"net/http"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/go-playground/webhooks/v6/github"
 	"github.com/nats-io/nats.go"
 	"github.com/vijeyash1/genericgitevents/model"
@@ -51,12 +53,13 @@ func main() {
 
 		case github.PushPayload:
 			release := payload.(github.PushPayload)
+			var url string = release.Repository.HTMLURL
 			var by, at, repo string = release.Commits[0].Author.Name, release.HeadCommit.Timestamp, release.Repository.Name
-			publishGithubMetrics(by, at, repo, js)
+			publishGithubMetrics(url, by, at, repo, js)
 
-			fmt.Printf("commited by: %s \n", release.Commits[0].Author.Name)
-			fmt.Printf("commited at: %s \n", release.HeadCommit.Timestamp)
-			fmt.Printf("repository name:%s \n", release.Repository.Name)
+			//fmt.Printf("commited by: %s \n", release.Commits[0].Author.Name)
+			//fmt.Printf("commited at: %s \n", release.HeadCommit.Timestamp)
+			//fmt.Printf("repository name:%s \n", release.Repository.Name)
 			//	fmt.Printf("default branch:%s \n", release.Repository.DefaultBranch)
 			//	fmt.Printf("master branch:%s \n", release.Repository.MasterBranch)
 		}
@@ -89,17 +92,39 @@ func createStream(js nats.JetStreamContext) error {
 	return nil
 }
 
-func publishGithubMetrics(by string, at string, repo string, js nats.JetStreamContext) (bool, error) {
+func publishGithubMetrics(url string, by string, at string, repo string, js nats.JetStreamContext) (bool, error) {
 	metrics := model.Githubevent{
 		CommitedBy: by,
 		CommitedAt: at,
 		Repository: repo,
 	}
+	dir, err := ioutil.TempDir("", "commit-stat")
+	checkErr(err)
+	defer os.RemoveAll(dir) // clean up
+	r, err := git.PlainClone(dir, false, &git.CloneOptions{
+		URL: url,
+	})
+	checkErr(err)
+	// ... retrieving the branch being pointed by HEAD
+	ref, err := r.Head()
+	checkErr(err)
+	// ... retrieving the commit object
+	commit, err := r.CommitObject(ref.Hash())
+	checkErr(err)
+	stats, _ := commit.Stats()
+
+	for _, stat := range stats {
+		fmt.Printf("add: %d lines\tdel: %d lines\tfile: %s\n", stat.Addition, stat.Deletion, stat.Name)
+		metrics.Added = stat.Addition
+		metrics.Deleted = stat.Deletion
+		metrics.Filename = stat.Name
+	}
 	metricsJson, _ := json.Marshal(metrics)
-	_, err := js.Publish(eventSubject, metricsJson)
+	_, err = js.Publish(eventSubject, metricsJson)
 	if err != nil {
 		return true, err
 	}
+	fmt.Println(string(metricsJson))
 	log.Printf("Metrics with repo name:%s has been published\n", repo)
 	return false, nil
 }
