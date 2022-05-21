@@ -54,9 +54,11 @@ func main() {
 
 		case github.PushPayload:
 			release := payload.(github.PushPayload)
+			var ref = "refs/heads/"
+			var branch = release.Ref[len(ref):]
 			var url string = release.Repository.HTMLURL
 			var by, at, repo string = release.Commits[0].Author.Name, release.HeadCommit.Timestamp, release.Repository.Name
-			publishGithubMetrics(url, by, at, repo, js)
+			publishGithubMetrics(branch, url, by, at, repo, js)
 		}
 	})
 	fmt.Println("github webhook server started at port 8000")
@@ -87,11 +89,12 @@ func createStream(js nats.JetStreamContext) error {
 	return nil
 }
 
-func publishGithubMetrics(url string, by string, at string, repo string, js nats.JetStreamContext) (bool, error) {
+func publishGithubMetrics(branch, url, by, at, repo string, js nats.JetStreamContext) (bool, error) {
 	metrics := model.Githubevent{
-		CommitedBy: by,
-		CommitedAt: at,
-		Repository: repo,
+		CommitedBy:   by,
+		CommitedAt:   at,
+		Repository:   repo,
+		Commitedfrom: branch,
 	}
 
 	dir, err := ioutil.TempDir("", "commit-stat")

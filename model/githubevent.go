@@ -8,4 +8,5 @@ type Githubevent struct {
 	Deleted           []int
 	Filename          []string
 	Availablebranches []string
+	Commitedfrom      string
 }
