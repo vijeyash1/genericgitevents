@@ -56,12 +56,6 @@ func main() {
 			var url string = release.Repository.HTMLURL
 			var by, at, repo string = release.Commits[0].Author.Name, release.HeadCommit.Timestamp, release.Repository.Name
 			publishGithubMetrics(url, by, at, repo, js)
-
-			//fmt.Printf("commited by: %s \n", release.Commits[0].Author.Name)
-			//fmt.Printf("commited at: %s \n", release.HeadCommit.Timestamp)
-			//fmt.Printf("repository name:%s \n", release.Repository.Name)
-			//	fmt.Printf("default branch:%s \n", release.Repository.DefaultBranch)
-			//	fmt.Printf("master branch:%s \n", release.Repository.MasterBranch)
 		}
 	})
 	fmt.Println("github webhook server started at port 8000")
@@ -98,7 +92,7 @@ func publishGithubMetrics(url string, by string, at string, repo string, js nats
 		CommitedAt: at,
 		Repository: repo,
 	}
-	//fmt.Printf("ADD: %v Deleted:%v", metrics.Added, metrics.Deleted)
+
 	dir, err := ioutil.TempDir("", "commit-stat")
 	checkErr(err)
 	defer os.RemoveAll(dir) // clean up
@@ -115,7 +109,7 @@ func publishGithubMetrics(url string, by string, at string, repo string, js nats
 	stats, _ := commit.Stats()
 
 	for _, stat := range stats {
-		fmt.Printf("add: %d lines\tdel: %d lines\tfile: %s\n", stat.Addition, stat.Deletion, stat.Name)
+		//fmt.Printf("add: %d lines\tdel: %d lines\tfile: %s\n", stat.Addition, stat.Deletion, stat.Name)
 		metrics.Added = append(metrics.Added, stat.Addition)
 		metrics.Deleted = append(metrics.Deleted, stat.Deletion)
 		metrics.Filename = append(metrics.Filename, stat.Name)
