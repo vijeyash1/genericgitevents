@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"net/http"
 
@@ -100,6 +101,26 @@ func publishGithubMetrics(url string, by string, at string, repo string, js nats
 		URL: url,
 	})
 	checkErr(err)
+	//"origin" is a shorthand name
+	// for the remote repository that a project was originally cloned from
+	remote, err := r.Remote("origin")
+	if err != nil {
+		panic(err)
+	}
+	refList, err := remote.List(&git.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+	refPrefix := "refs/heads/"
+	for _, ref := range refList {
+		refName := ref.Name().String()
+		if !strings.HasPrefix(refName, refPrefix) {
+			continue
+		}
+		branchName := refName[len(refPrefix):]
+		metrics.Availablebranches = append(metrics.Availablebranches, branchName)
+
+	}
 	// ... retrieving the branch being pointed by HEAD
 	ref, err := r.Head()
 	checkErr(err)
