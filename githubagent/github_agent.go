@@ -98,6 +98,7 @@ func publishGithubMetrics(url string, by string, at string, repo string, js nats
 		CommitedAt: at,
 		Repository: repo,
 	}
+	//fmt.Printf("ADD: %v Deleted:%v", metrics.Added, metrics.Deleted)
 	dir, err := ioutil.TempDir("", "commit-stat")
 	checkErr(err)
 	defer os.RemoveAll(dir) // clean up
@@ -115,9 +116,9 @@ func publishGithubMetrics(url string, by string, at string, repo string, js nats
 
 	for _, stat := range stats {
 		fmt.Printf("add: %d lines\tdel: %d lines\tfile: %s\n", stat.Addition, stat.Deletion, stat.Name)
-		metrics.Added = stat.Addition
-		metrics.Deleted = stat.Deletion
-		metrics.Filename = stat.Name
+		metrics.Added = append(metrics.Added, stat.Addition)
+		metrics.Deleted = append(metrics.Deleted, stat.Deletion)
+		metrics.Filename = append(metrics.Filename, stat.Name)
 	}
 	metricsJson, _ := json.Marshal(metrics)
 	_, err = js.Publish(eventSubject, metricsJson)
