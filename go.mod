@@ -3,8 +3,8 @@ module github.com/vijeyash1/genericgitevents
 go 1.18
 
 require (
+	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
-	github.com/go-playground/webhooks/v6 v6.0.1
 	github.com/nats-io/nats.go v1.15.0
 )
 
@@ -14,7 +14,6 @@ require (
 	github.com/acomagu/bufpipe v1.0.3 // indirect
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
-	github.com/go-git/go-billy/v5 v5.3.1 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect

@@ -3,14 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
 
 	"net/http"
 
+	billy "github.com/go-git/go-billy/v5"
+	memfs "github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
+	htt "github.com/go-git/go-git/v5/plumbing/transport/http"
+	memory "github.com/go-git/go-git/v5/storage/memory"
 	"github.com/nats-io/nats.go"
 	"github.com/vijeyash1/genericgitevents/model"
 )
@@ -25,6 +28,8 @@ const (
 
 var token string = os.Getenv("NATS_TOKEN")
 var natsurl string = os.Getenv("NATS_ADDRESS")
+var gituser string = os.Getenv("GIT_USER")
+var gittoken string = os.Getenv("GIT_TOKEN")
 
 type Giturl struct {
 	Repository struct {
@@ -32,6 +37,19 @@ type Giturl struct {
 		GitHTTPURL string `json:"git_http_url"`
 	}
 }
+
+func (p Giturl) urlCheck() string {
+	url, url1 := p.Repository.URL, p.Repository.GitHTTPURL
+	if url != "" {
+		return url
+	} else if url1 != "" {
+		return url1
+	}
+	return ""
+}
+
+var storer *memory.Storage
+var fs billy.Filesystem
 
 func main() {
 
@@ -46,16 +64,14 @@ func main() {
 	checkErr(err)
 	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		var p Giturl
-
 		err := json.NewDecoder(r.Body).Decode(&p)
 		checkErr(err)
 
-		url := p.Repository.URL
-
 		length := "https://github.com/"
+		url := p.urlCheck()
 		repo := url[len(length):]
 
-		publishGithubMetrics(url, repo, js)
+		publishGithubMetrics(p.urlCheck(), repo, gituser, gittoken, js)
 
 	})
 	fmt.Println("github webhook server started at port 8000")
@@ -86,18 +102,29 @@ func createStream(js nats.JetStreamContext) error {
 	return nil
 }
 
-func publishGithubMetrics(url, repo string, js nats.JetStreamContext) (bool, error) {
+func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContext) (bool, error) {
 	metrics := model.Githubevent{
 		Repository: repo,
 	}
-
-	dir, err := ioutil.TempDir("", "commit-stat")
-	checkErr(err)
-	defer os.RemoveAll(dir) // clean up
-	r, err := git.PlainClone(dir, false, &git.CloneOptions{
-		URL: url,
+	storer = memory.NewStorage()
+	fs = memfs.New()
+	// Authentication
+	auth := &htt.BasicAuth{
+		Username: user,
+		Password: token,
+	}
+	r, err := git.Clone(storer, fs, &git.CloneOptions{
+		URL:  url,
+		Auth: auth,
 	})
 	checkErr(err)
+	// dir, err := ioutil.TempDir("", "commit-stat")
+	// checkErr(err)
+	// defer os.RemoveAll(dir) // clean up
+	// r, err := git.PlainClone(dir, false, &git.CloneOptions{
+	// 	URL: url,
+	// })
+	// checkErr(err)
 	//"origin" is a shorthand name
 	// for the remote repository that a project was originally cloned from
 	remote, err := r.Remote("origin")
