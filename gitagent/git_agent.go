@@ -40,12 +40,16 @@ type Giturl struct {
 
 func (p Giturl) urlCheck() string {
 	url, url1 := p.Repository.URL, p.Repository.GitHTTPURL
-	if url != "" {
-		return url
-	} else if url1 != "" {
-		return url1
+	var g string
+	var u []string = []string{url, url1}
+	refPrefix := "https"
+	for _, ref := range u {
+		if !strings.HasPrefix(ref, refPrefix) {
+			continue
+		}
+		g = ref
 	}
-	return ""
+	return g
 }
 
 var storer *memory.Storage
