@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-playground/webhooks/v6/github"
 	"github.com/nats-io/nats.go"
 	"github.com/vijeyash1/genericgitevents/model"
 )
@@ -27,6 +26,13 @@ const (
 var token string = os.Getenv("NATS_TOKEN")
 var natsurl string = os.Getenv("NATS_ADDRESS")
 
+type Giturl struct {
+	Repository struct {
+		URL        string `json:"url"`
+		GitHTTPURL string `json:"git_http_url"`
+	}
+}
+
 func main() {
 
 	// Connect to NATS
@@ -39,27 +45,18 @@ func main() {
 	err = createStream(js)
 	checkErr(err)
 	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		var p Giturl
 
-		hook, _ := github.New(github.Options.Secret("helloworld"))
-		payload, err := hook.Parse(r, github.PushEvent)
-		//fmt.Printf("%T \n", payload)
+		err := json.NewDecoder(r.Body).Decode(&p)
+		checkErr(err)
 
-		if err != nil {
-			if err == github.ErrEventNotFound {
-				// ok event wasn;t one of the ones asked to be parsed
-				fmt.Println("this event was not present")
-			}
-		}
-		switch payload.(type) {
+		url := p.Repository.URL
 
-		case github.PushPayload:
-			release := payload.(github.PushPayload)
-			var ref = "refs/heads/"
-			var branch = release.Ref[len(ref):]
-			var url string = release.Repository.HTMLURL
-			var by, at, repo string = release.Commits[0].Author.Name, release.HeadCommit.Timestamp, release.Repository.Name
-			publishGithubMetrics(branch, url, by, at, repo, js)
-		}
+		length := "https://github.com/"
+		repo := url[len(length):]
+
+		publishGithubMetrics(url, repo, js)
+
 	})
 	fmt.Println("github webhook server started at port 8000")
 	http.ListenAndServe(":8000", nil)
@@ -89,12 +86,9 @@ func createStream(js nats.JetStreamContext) error {
 	return nil
 }
 
-func publishGithubMetrics(branch, url, by, at, repo string, js nats.JetStreamContext) (bool, error) {
+func publishGithubMetrics(url, repo string, js nats.JetStreamContext) (bool, error) {
 	metrics := model.Githubevent{
-		CommitedBy:   by,
-		CommitedAt:   at,
-		Repository:   repo,
-		Commitedfrom: branch,
+		Repository: repo,
 	}
 
 	dir, err := ioutil.TempDir("", "commit-stat")
@@ -130,6 +124,10 @@ func publishGithubMetrics(branch, url, by, at, repo string, js nats.JetStreamCon
 	// ... retrieving the commit object
 	commit, err := r.CommitObject(ref.Hash())
 	checkErr(err)
+
+	metrics.CommitedBy = commit.Author.Name
+	metrics.CommitedAt = commit.Author.When
+
 	stats, _ := commit.Stats()
 
 	for _, stat := range stats {
@@ -144,6 +142,6 @@ func publishGithubMetrics(branch, url, by, at, repo string, js nats.JetStreamCon
 		return true, err
 	}
 	fmt.Println(string(metricsJson))
-	log.Printf("Metrics with repo name:%s has been published\n", repo)
+	log.Printf("Metrics with url:%s has been published\n", url)
 	return false, nil
 }
