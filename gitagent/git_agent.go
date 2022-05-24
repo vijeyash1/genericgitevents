@@ -26,10 +26,12 @@ const (
 	path           = "/webhooks"
 )
 
-var token string = os.Getenv("NATS_TOKEN")
-var natsurl string = os.Getenv("NATS_ADDRESS")
-var gituser string = os.Getenv("GIT_USER")
-var gittoken string = os.Getenv("GIT_TOKEN")
+var (
+	token    = os.Getenv("NATS_TOKEN")
+	natsurl  = os.Getenv("NATS_ADDRESS")
+	gituser  = os.Getenv("GIT_USER")
+	gittoken = os.Getenv("GIT_TOKEN")
+)
 
 type Giturl struct {
 	Repository struct {
@@ -38,9 +40,8 @@ type Giturl struct {
 	}
 }
 
-func (p Giturl) urlCheck() string {
+func (p Giturl) urlCheck() (g string) {
 	url, url1 := p.Repository.URL, p.Repository.GitHTTPURL
-	var g string
 	var u []string = []string{url, url1}
 	refPrefix := "https"
 	for _, ref := range u {
@@ -49,7 +50,7 @@ func (p Giturl) urlCheck() string {
 		}
 		g = ref
 	}
-	return g
+	return
 }
 
 var storer *memory.Storage
@@ -75,10 +76,10 @@ func main() {
 		url := p.urlCheck()
 		repo := url[len(length):]
 
-		publishGithubMetrics(p.urlCheck(), repo, gituser, gittoken, js)
+		publishGithubMetrics(url, repo, gituser, gittoken, js)
 
 	})
-	fmt.Println("github webhook server started at port 8000")
+	fmt.Println("git webhook server started at port 8000")
 	http.ListenAndServe(":8000", nil)
 }
 func checkErr(err error) {
@@ -139,8 +140,10 @@ func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContex
 	if err != nil {
 		panic(err)
 	}
+
 	refPrefix := "refs/heads/"
 	for _, ref := range refList {
+
 		refName := ref.Name().String()
 		if !strings.HasPrefix(refName, refPrefix) {
 			continue
@@ -158,6 +161,7 @@ func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContex
 
 	metrics.CommitedBy = commit.Author.Name
 	metrics.CommitedAt = commit.Author.When
+	metrics.Commitmessage = commit.Message
 
 	stats, _ := commit.Stats()
 
