@@ -12,17 +12,19 @@ import (
 	billy "github.com/go-git/go-billy/v5"
 	memfs "github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	htt "github.com/go-git/go-git/v5/plumbing/transport/http"
 	memory "github.com/go-git/go-git/v5/storage/memory"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/vijeyash1/genericgitevents/model"
 )
 
 const (
-	streamName     = "METRICS"
-	streamSubjects = "METRICS.*"
-	eventSubject   = "METRICS.event"
-	allSubject     = "METRICS.all"
+	streamName     = "GITMETRICS"
+	streamSubjects = "GITMETRICS.*"
+	eventSubject   = "GITMETRICS.event"
+	allSubject     = "GITMETRICS.all"
 	path           = "/webhooks"
 )
 
@@ -39,6 +41,8 @@ type Giturl struct {
 		GitHTTPURL string `json:"git_http_url"`
 	}
 }
+
+type Branches []string
 
 func (p Giturl) urlCheck() (g string) {
 	url, url1 := p.Repository.URL, p.Repository.GitHTTPURL
@@ -58,6 +62,8 @@ var fs billy.Filesystem
 
 func main() {
 
+	uuid := uuid.New()
+
 	// Connect to NATS
 	nc, err := nats.Connect(natsurl, nats.Name("Github metrics"), nats.Token(token))
 	checkErr(err)
@@ -76,7 +82,7 @@ func main() {
 		url := p.urlCheck()
 		repo := url[len(length):]
 
-		publishGithubMetrics(url, repo, gituser, gittoken, js)
+		publishGithubMetrics(uuid, url, repo, gituser, gittoken, js)
 
 	})
 	fmt.Println("git webhook server started at port 8000")
@@ -107,9 +113,10 @@ func createStream(js nats.JetStreamContext) error {
 	return nil
 }
 
-func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContext) (bool, error) {
+func publishGithubMetrics(uuid uuid.UUID, url, repo, user, token string, js nats.JetStreamContext) (bool, error) {
 	metrics := model.Githubevent{
 		Repository: repo,
+		Uuid:       uuid,
 	}
 	storer = memory.NewStorage()
 	fs = memfs.New()
@@ -142,6 +149,8 @@ func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContex
 	}
 
 	refPrefix := "refs/heads/"
+
+	var branches Branches
 	for _, ref := range refList {
 
 		refName := ref.Name().String()
@@ -149,9 +158,11 @@ func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContex
 			continue
 		}
 		branchName := refName[len(refPrefix):]
-		metrics.Availablebranches = append(metrics.Availablebranches, branchName)
+
+		branches = append(branches, branchName)
 
 	}
+	metrics.Availablebranches = totalbranches(&branches)
 	// ... retrieving the branch being pointed by HEAD
 	ref, err := r.Head()
 	checkErr(err)
@@ -165,12 +176,8 @@ func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContex
 
 	stats, _ := commit.Stats()
 
-	for _, stat := range stats {
-		//fmt.Printf("add: %d lines\tdel: %d lines\tfile: %s\n", stat.Addition, stat.Deletion, stat.Name)
-		metrics.Added = append(metrics.Added, stat.Addition)
-		metrics.Deleted = append(metrics.Deleted, stat.Deletion)
-		metrics.Filename = append(metrics.Filename, stat.Name)
-	}
+	metrics.Commitstat = getCommitStats(stats)
+
 	metricsJson, _ := json.Marshal(metrics)
 	_, err = js.Publish(eventSubject, metricsJson)
 	if err != nil {
@@ -179,4 +186,28 @@ func publishGithubMetrics(url, repo, user, token string, js nats.JetStreamContex
 	fmt.Println(string(metricsJson))
 	log.Printf("Metrics with url:%s has been published\n", url)
 	return false, nil
+}
+
+func getCommitStats(stat object.FileStats) string {
+	var sb strings.Builder
+	for _, comm := range stat {
+		sb.WriteString(comm.Name)
+		sb.WriteString(",")
+		sb.WriteString("Add" + ":")
+		sb.WriteString(fmt.Sprintf("%v", comm.Addition))
+		sb.WriteString(",")
+		sb.WriteString("Del" + ":")
+		sb.WriteString(fmt.Sprintf("%v", comm.Deletion))
+		sb.WriteString("  ")
+	}
+	return sb.String()
+}
+
+func totalbranches(b *Branches) string {
+	var sb strings.Builder
+	for _, bran := range *b {
+		sb.WriteString(bran)
+		sb.WriteString(",")
+	}
+	return sb.String()
 }

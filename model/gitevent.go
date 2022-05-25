@@ -1,14 +1,17 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Githubevent struct {
+	Uuid              uuid.UUID
 	CommitedBy        string
 	CommitedAt        time.Time
 	Repository        string
-	Added             []int
-	Deleted           []int
-	Filename          []string
-	Availablebranches []string
+	Commitstat        string
+	Availablebranches string
 	Commitmessage     string
 }
